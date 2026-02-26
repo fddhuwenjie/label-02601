@@ -51,6 +51,5 @@ tmp/
 temp/
 
 # Output images
-output/
 *.png
 !README.md
