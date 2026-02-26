@@ -1,0 +1,7 @@
+flask==3.0.0
+markdown==3.5.1
+Pillow==10.1.0
+html2image==2.0.4.3
+Werkzeug==3.0.1
+gunicorn==21.2.0
+pytest==7.4.3
