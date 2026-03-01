@@ -47,7 +47,18 @@ pip install -r requirements.txt
 python app.py
 ```
 
-注意：本地运行需要安装 Chromium 浏览器。
+注意：本地运行需要安装 Chromium 浏览器，并通过环境变量 `CHROME_BIN` 指定其路径：
+
+```bash
+# macOS (Google Chrome)
+export CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+# macOS (Chromium via Homebrew)
+export CHROME_BIN="/usr/local/bin/chromium"
+
+# Linux
+export CHROME_BIN="/usr/bin/chromium"  # 或 /usr/bin/chromium-browser
+```
 
 ## Services
 
@@ -69,7 +80,7 @@ python app.py
 - 支持 Obsidian 特有语法:
   - `==高亮文本==` 高亮显示
   - `[[双链]]` 和 `[[双链|显示文本]]` 内部链接
-  - `![[嵌入]]` 嵌入引用
+  - `![[嵌入]]` 嵌入引用（简化实现：渲染为 `📎 文件名` 占位提示，不读取实际文件内容）
   - `%%注释%%` 注释（不显示）
   - `> [!note] 标题` Callout 语法
 - 支持代码高亮
@@ -110,11 +121,14 @@ theme: light (可选)
 
 ### 使用示例
 
+> **端口说明**：以下示例使用端口 `5001`，对应 Docker 启动方式（`docker-compose.yml` 中映射 `5001:5000`）。  
+> 若使用**本地启动**（`python app.py`），请将端口改为 `5000`。
+
 ```bash
 # 创建输出目录
 mkdir -p output
 
-# 使用示例文件测试
+# 使用示例文件测试 (Docker: 5001 / 本地: 5000)
 curl -X POST http://localhost:5001/convert/file \
   -F "file=@examples/sample.md" \
   -F "theme=light" \
