@@ -305,42 +305,54 @@ class MarkdownToImageConverter:
     
     def _crop_whitespace(self, input_path, output_path, theme='light'):
         """裁剪图片底部空白区域"""
-        img = Image.open(input_path)
-        
-        # 根据主题确定背景色
-        if theme == 'dark':
-            bg_color = (30, 30, 30)  # #1e1e1e
-        else:
-            bg_color = (255, 255, 255)  # white
-        
-        # 转换为 RGB 模式
-        if img.mode == 'RGBA':
-            background = Image.new('RGB', img.size, bg_color)
-            background.paste(img, mask=img.split()[3])
-            img = background
-        
-        # 获取图片数据
-        pixels = img.load()
-        width, height = img.size
-        
-        # 从底部向上查找非空白行
-        bottom = height
-        for y in range(height - 1, -1, -1):
-            row_is_blank = True
-            for x in range(width):
-                pixel = pixels[x, y]
-                if isinstance(pixel, tuple):
-                    if pixel[:3] != bg_color:
-                        row_is_blank = False
-                        break
-                else:
-                    if pixel != bg_color[0]:
-                        row_is_blank = False
-                        break
-            if not row_is_blank:
-                bottom = y + 40  # 添加一些底部边距
-                break
-        
-        # 裁剪图片
-        cropped = img.crop((0, 0, width, min(bottom, height)))
-        cropped.save(output_path, 'PNG')
+        try:
+            img = Image.open(input_path)
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"截图文件未生成，请检查 Chromium 是否正确安装并可通过 CHROME_BIN 访问: {input_path}"
+            )
+        except Exception as e:
+            raise RuntimeError(f"无法读取截图文件 {input_path}: {e}") from e
+
+        try:
+            # 根据主题确定背景色
+            if theme == 'dark':
+                bg_color = (30, 30, 30)  # #1e1e1e
+            else:
+                bg_color = (255, 255, 255)  # white
+
+            # 转换为 RGB 模式
+            if img.mode == 'RGBA':
+                background = Image.new('RGB', img.size, bg_color)
+                background.paste(img, mask=img.split()[3])
+                img = background
+
+            # 获取图片数据
+            pixels = img.load()
+            width, height = img.size
+
+            # 从底部向上查找非空白行
+            bottom = height
+            for y in range(height - 1, -1, -1):
+                row_is_blank = True
+                for x in range(width):
+                    pixel = pixels[x, y]
+                    if isinstance(pixel, tuple):
+                        if pixel[:3] != bg_color:
+                            row_is_blank = False
+                            break
+                    else:
+                        if pixel != bg_color[0]:
+                            row_is_blank = False
+                            break
+                if not row_is_blank:
+                    bottom = y + 40  # 添加一些底部边距
+                    break
+
+            # 裁剪图片
+            cropped = img.crop((0, 0, width, min(bottom, height)))
+            cropped.save(output_path, 'PNG')
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"图片裁剪处理失败: {e}") from e

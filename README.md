@@ -152,3 +152,21 @@ curl -X POST http://localhost:5001/convert/file \
   -F "width=1200" \
   --output output/output.png
 ```
+
+
+## 运行测试
+
+```bash
+cd backend
+
+# 仅运行单元测试（无需 Chromium）
+pytest tests/ -m "not integration"
+
+# 运行全部测试，包括集成测试（需要 Chromium，参考"本地启动"配置 CHROME_BIN）
+pytest tests/
+
+# 查看详细输出
+pytest tests/ -m "not integration" -v
+```
+
+> 集成测试（`test_convert_creates_image`）会调用 Chromium 进行真实截图，本地运行前请确保已按"本地启动"章节配置好 `CHROME_BIN` 环境变量。
