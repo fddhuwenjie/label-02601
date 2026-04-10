@@ -1,10 +1,14 @@
 """
 Obsidian Markdown to Image Converter API
 """
+import io
+import json
 import logging
 import os
+import shutil
 import tempfile
 import uuid
+import zipfile
 
 from flask import Flask, request, jsonify, send_file
 from converter import MarkdownToImageConverter
@@ -185,6 +189,118 @@ def _cleanup_file(filepath):
             logger.debug(f"已清理临时文件: {filepath}")
         except OSError as e:
             logger.warning(f"清理临时文件失败: {filepath}, 错误: {e}")
+
+
+@app.route('/api/convert/batch', methods=['POST'])
+def convert_batch():
+    """
+    批量转换 Markdown 页面为 PNG 并打包为 ZIP
+
+    Request Body:
+        - pages: 包含多个 Markdown 页面的数组，每个页面包含 title 和 content
+        - width: 图片宽度 (可选, 默认 800, 范围 200-4000)
+        - theme: 主题 light/dark (可选, 默认 light)
+
+    Returns:
+        ZIP 文件包含所有转换成功的 PNG 文件和 errors.json（如果有错误）
+    """
+    data = request.get_json()
+
+    if not data or 'pages' not in data or not isinstance(data['pages'], list):
+        logger.warning("请求缺少 pages 数组")
+        return jsonify({'error': 'Missing or invalid pages array', 'code': 'MISSING_PAGES'}), 400
+
+    pages = data['pages']
+    width = data.get('width', 800)
+    theme = data.get('theme', 'light')
+
+    # 参数校验
+    if not isinstance(width, int) or width < MIN_WIDTH or width > MAX_WIDTH:
+        logger.warning(f"无效的宽度参数: {width}")
+        return jsonify({
+            'error': f'Width must be an integer between {MIN_WIDTH} and {MAX_WIDTH}',
+            'code': 'INVALID_WIDTH'
+        }), 400
+
+    if theme not in VALID_THEMES:
+        logger.warning(f"无效的主题参数: {theme}")
+        return jsonify({
+            'error': f'Theme must be one of: {", ".join(VALID_THEMES)}',
+            'code': 'INVALID_THEME'
+        }), 400
+
+    if len(pages) == 0:
+        logger.warning("pages 数组为空")
+        return jsonify({'error': 'Pages array is empty', 'code': 'EMPTY_PAGES'}), 400
+
+    temp_dir = tempfile.mkdtemp()
+    zip_buffer = io.BytesIO()
+    errors = []
+
+    try:
+        logger.info(f"开始批量转换: {len(pages)} 个页面, width={width}, theme={theme}")
+
+        # 处理每个页面
+        for i, page in enumerate(pages):
+            title = page.get('title', f'page_{i}')
+            content = page.get('content', '')
+
+            if not content:
+                errors.append({'title': title, 'error': 'Empty content'})
+                logger.warning(f"页面 {title} 内容为空，跳过")
+                continue
+
+            # 确保文件名合法
+            safe_title = "".join([c for c in title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+            if not safe_title:
+                safe_title = f'page_{i}'
+            png_filename = f'{safe_title}.png'
+            png_path = os.path.join(temp_dir, png_filename)
+
+            try:
+                logger.info(f"转换页面: {title} ({i + 1}/{len(pages)})")
+                converter.convert(content, png_path, width=width, theme=theme)
+                logger.info(f"页面 {title} 转换成功")
+            except Exception as e:
+                error_msg = str(e)
+                errors.append({'title': title, 'error': error_msg})
+                logger.error(f"页面 {title} 转换失败: {error_msg}", exc_info=True)
+                _cleanup_file(png_path)
+
+        # 创建 ZIP 文件
+        logger.info(f"打包文件，成功: {len(pages) - len(errors)}, 失败: {len(errors)}")
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # 添加成功转换的 PNG 文件
+            for filename in os.listdir(temp_dir):
+                if filename.endswith('.png'):
+                    file_path = os.path.join(temp_dir, filename)
+                    zipf.write(file_path, filename)
+
+            # 如果有错误，添加 errors.json
+            if errors:
+                errors_json = json.dumps(errors, ensure_ascii=False, indent=2)
+                zipf.writestr('errors.json', errors_json)
+
+        zip_buffer.seek(0)
+
+        response = send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name='batch_conversion.zip'
+        )
+
+        logger.info("批量转换完成")
+        return response
+
+    except Exception as e:
+        logger.error(f"批量转换失败: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Batch conversion failed', 'detail': str(e), 'code': 'BATCH_CONVERSION_ERROR'}), 500
+
+    finally:
+        # 清理临时目录
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        logger.debug(f"已清理临时目录: {temp_dir}")
 
 
 if __name__ == '__main__':
